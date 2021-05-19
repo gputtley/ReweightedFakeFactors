@@ -34,5 +34,8 @@ To hadd the resulting output run this command.
 python scripts/batch_add_ff_reweight_to_trees.py --output_location=/vols/cms/gu18/Offline/output/MSSM/mssm_2017_v10_new --hadd
 ```
 
+## Links
+
+Reweighted with Boosed Decision Trees: [article](https://arogozhnikov.github.io/2015/10/09/gradient-boosted-reweighter.html), [paper](https://arxiv.org/pdf/1608.05806.pdf), [notebook](https://github.com/arogozhnikov/hep_ml/blob/master/notebooks/DemoReweighting.ipynb), [github repository](https://github.com/arogozhnikov/hep_ml) 
 
 
