@@ -99,7 +99,7 @@ def setup_dataframe(loc,root_files,channel,year,vars,selection):
         split_list[j] = ".multiply("
         split_list[j+1] += ")"
       elif not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()) and not split_list[j]=="":
-        split_list[j] =  "df['{}']".format(split_list[j])
+        split_list[j] =  "df.loc[:,'{}']".format(split_list[j])
       elif "==" in split_list[j]:
         split_list[j] = ".apply(lambda x: 1 if x=={} else 0)".format(split_list[j+1])
         split_list[j+1] = ""
@@ -180,20 +180,6 @@ def find_closed_bracket(open_bracket,flist):
     elif flist[i] == ")": ob -= 1
     if ob == 0: break
   return i
-
-def equal_y_events(X_train,y_train,y_var,y_vals=[0,1]):
-  df_list = []
-  df_size = []
-  df = pd.concat([X_train, y_train], axis=1)
-  for i in range(0,len(y_vals)):
-    df_list.append(df[(df[y_var] == y_vals[i])])
-    df_size.append(len(df_list[i]))
-  min_size = min(df_size)
-  for i in range(0,len(y_vals)):
-    df_list[i] = df_list[i].sample(frac=float(min_size)/float(df_size[i]))
-  new_df = pd.concat(df_list, axis=0)
-  new_X_train, new_y_train = new_df.drop([y_var],axis=1),new_df.loc[:,y_var] 
-  return new_X_train, new_y_train
 
 def to_root(df, path, key='my_ttree', mode='w', store_index=True, *args, **kwargs):
     """
@@ -308,7 +294,8 @@ def KS_test(original, target, original_weights, target_weights, columns=['mt_tot
 def SelectColumns(df,columns):
   # Get modified variables
   mod_vars = []
-  orig_keys = df.keys()
+  new_df = df.copy(deep=True)
+  orig_keys = new_df.keys()
   delim=["*","/","(",")","==",">=","<",">","&&","||"]
   for i in columns:
     split_list = custom_split(i.replace(" ",""),deliminators=delim)
@@ -327,7 +314,7 @@ def SelectColumns(df,columns):
         split_list[j] = ".multiply("
         split_list[j+1] += ")"
       elif not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()) and not split_list[j]=="":
-        split_list[j] =  "df['{}']".format(split_list[j])
+        split_list[j] =  "new_df.loc[:,'{}']".format(split_list[j])
       elif "==" in split_list[j]:
         split_list[j] = ".apply(lambda x: 1 if x=={} else 0)".format(split_list[j+1])
         split_list[j+1] = ""
@@ -352,21 +339,22 @@ def SelectColumns(df,columns):
             split_list[j+3] = ""
     cmd = ""
     for i in split_list: cmd += i
-    df.loc[:,var_string] = eval(cmd)
+    new_df.loc[:,var_string] = eval(cmd)
 
   # rename X_vars
+  columns_string = []
   for i in range(0,len(columns)):
-    columns[i] = columns[i].replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
+    columns_string.append(columns[i].replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")",""))
 
 
   # Removing variables not used
   for i in orig_keys:
-    if i not in columns:
+    if i not in columns_string:
       var_name  = i.replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
-      df = df.drop([var_name],axis=1)
+      new_df = new_df.drop([var_name],axis=1)
 
-  df = df.loc[:,columns]
-  return df
+  new_df = new_df.loc[:,columns_string]
+  return new_df
 
 def GetDataframe(baseline,lumi,params,input_folder,files,channel,year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars,data=False):
   for i in files:
@@ -462,10 +450,11 @@ def GetNormalisation(dfs,model):
 
 def ScoreModel(dfs,model,X_vars,scoring_vars,other_vars,silent=False):
  # Applying model to train dataset
+  new_dfs = {}
+  for key,val in dfs.items():
+    new_dfs[key] = val.copy(deep=True)
   gb_weights_train = model.predict_weights(dfs["original_train"],dfs["original_weights_train"],merge_weights=False)
   wts_1 = dfs["original_weights_train"].multiply(gb_weights_train)
-  norm = dfs["target_weights_train"].sum()/wts_1.sum()
-  print norm
 
   for i in scoring_vars:
     if i not in X_vars:
@@ -473,17 +462,17 @@ def ScoreModel(dfs,model,X_vars,scoring_vars,other_vars,silent=False):
 
   # add variables back that are needed for scoring
   for i in other_vars:
-    dfs["original_train"].loc[:,i] = dfs["original_other_train"].loc[:,i]
-    dfs["target_train"].loc[:,i] = dfs["target_other_train"].loc[:,i]
+    new_dfs["original_train"].loc[:,i] = dfs["original_other_train"].loc[:,i]
+    new_dfs["target_train"].loc[:,i] = dfs["target_other_train"].loc[:,i]
 
   if not silent:
     print "----------------------------------------------------------------------------------------------"
     print "Train dataset"
     print "----------------------------------------------------------------------------------------------"
-    print KS_test(dfs["original_train"], dfs["target_train"], wts_1, dfs["target_weights_train"], columns=scoring_vars)
+    print KS_test(new_dfs["original_train"], new_dfs["target_train"], wts_1, new_dfs["target_weights_train"], columns=scoring_vars)
 
-  gb_weights_test = model.predict_weights(dfs["original_test"],dfs["original_weights_test"],merge_weights=False)
-  wts_2 = dfs["original_weights_test"].multiply(gb_weights_test)
+  gb_weights_test = model.predict_weights(new_dfs["original_test"],new_dfs["original_weights_test"],merge_weights=False)
+  wts_2 = new_dfs["original_weights_test"].multiply(gb_weights_test)
 
   for i in scoring_vars:
     if i not in X_vars:
@@ -491,10 +480,10 @@ def ScoreModel(dfs,model,X_vars,scoring_vars,other_vars,silent=False):
 
   # add variables back that are needed for scoring
   for i in other_vars:
-    dfs["original_test"].loc[:,i] = dfs["original_other_test"].loc[:,i]
-    dfs["target_test"].loc[:,i] = dfs["target_other_test"].loc[:,i]
+    new_dfs["original_test"].loc[:,i] = dfs["original_other_test"].loc[:,i]
+    new_dfs["target_test"].loc[:,i] = dfs["target_other_test"].loc[:,i]
   
-  score =  KS_test(dfs["original_test"], dfs["target_test"], wts_2, dfs["target_weights_test"], columns=scoring_vars)
+  score =  KS_test(new_dfs["original_test"], new_dfs["target_test"], wts_2, new_dfs["target_weights_test"], columns=scoring_vars)
   if not silent:
     print "----------------------------------------------------------------------------------------------"
     print "Test dataset"
@@ -506,11 +495,10 @@ def ScoreModel(dfs,model,X_vars,scoring_vars,other_vars,silent=False):
 def CreateBatchJob(name,cmssw_base,cmd_list):
   if os.path.exists(name): os.system('rm %(name)s' % vars())
   os.system('echo "#!/bin/bash" >> %(name)s' % vars())
-  os.system('echo "cd %(cmssw_base)s/src/UserCode/ICHiggsTauTau/Analysis/HiggsTauTauRun2" >> %(name)s' % vars())
+  os.system('echo "cd %(cmssw_base)s/src/UserCode/ICHiggsTauTau/ReweightedFakeFactors" >> %(name)s' % vars())
   os.system('echo "source /vols/grid/cms/setup.sh" >> %(name)s' % vars())
   os.system('echo "export SCRAM_ARCH=slc6_amd64_gcc481" >> %(name)s' % vars())
   os.system('echo "eval \'scramv1 runtime -sh\'" >> %(name)s' % vars())
-  os.system('echo "source %(cmssw_base)s/src/UserCode/ICHiggsTauTau/Analysis/HiggsTauTauRun2/scripts/setup_libs.sh" >> %(name)s' % vars())
   os.system('echo "ulimit -s unlimited" >> %(name)s' % vars())
   for cmd in cmd_list:
     os.system('echo "%(cmd)s" >> %(name)s' % vars())

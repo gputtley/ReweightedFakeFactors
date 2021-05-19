@@ -4,20 +4,18 @@ import root_numpy
 import pandas
 import numpy
 import pickle
-#from hep_ml.reweight import GBReweighter
-#from hep_ml import reweight
-#from UserCode.ICHiggsTauTau import reweight
-#from UserCode.ICHiggsTauTau.reweight import GBReweighter
-#from UserCode.ICHiggsTauTau.ff_ml_tools import *
+import json
 from UserCode.ReweightedFakeFactors import reweight
 from UserCode.ReweightedFakeFactors.reweight import GBReweighter
 from UserCode.ReweightedFakeFactors.ff_ml_tools import *
-
 from hep_ml.metrics_utils import ks_2samp_weighted
+
+# python scripts/ff_reweight_ml.py --channel=mt --year=2017
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--channel',help= 'Input channel to determine fake factor weights for', default='mt')
 parser.add_argument('--year',help= 'Input year to determine fake factor weights for', default='2017')
+parser.add_argument('--output',help= 'Write outputs tp here', default='BDTs')
 parser.add_argument("--do_W", action='store_true',help="Get W + jets fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
 parser.add_argument("--do_QCD", action='store_true',help="Get qcd fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
 parser.add_argument("--do_ttbar", action='store_true',help="Get ttbar fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
@@ -94,7 +92,8 @@ if not args.batch:
   weights = ["wt","wt_tau_trg_mssm","wt_tau_id_mssm"]
   y_var = "deepTauVsJets_medium_X"
   selection_vars = ["os","mt_1","gen_match_2"] # additional variables need for selection later
-  other_vars = ["wt_ff_mssm_1","wt_ff_mssm_wjets_1","wt_ff_mssm_qcd_1","wt_ff_mssm_ttbar_1"]
+  #other_vars = ["wt_ff_mssm_1","wt_ff_mssm_wjets_1","wt_ff_mssm_qcd_1","wt_ff_mssm_ttbar_1"]
+  other_vars = []
   
   # read root files into dataframes, performing initial cuts
   if (args.do_W or args.do_QCD) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
@@ -114,7 +113,25 @@ if not args.batch:
   #  other_df_concat = GetDataframe(baseline,lumi,params,input_folder,other_files,args.channel,args.year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars)
   
   print ">> All root files converted to dataframes"
-  
+
+  # check if normalisation json exists
+  json_name = '{}/ff_reweight_normalisation.json'.format(args.output)
+  # Check to see if json exists
+  if os.path.isfile(json_name):
+    with open(json_name) as json_file:
+      norm_dict = json.load(json_file)
+  else:
+    norm_dict = {'et':{'2016':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
+                       '2017':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
+                       '2018':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0}},
+                 'mt':{'2016':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
+                       '2017':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
+                       '2018':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0}},
+                 'tt':{'2016':{'lead':0,'sublead':0},
+                       '2017':{'lead':0,'sublead':0},
+                       '2018':{'lead':0,'sublead':0}}}
+
+
   # perform training and test in each determination region
   if args.channel in ["mt","et"]:
     # get W + jets fake factors
@@ -155,15 +172,13 @@ if not args.batch:
               best_score['learning_rate'] = lr
               best_score['n_estimators'] = n_est
               # save model
-              filename = 'wjets_reweighted_ff_{}_{}.sav'.format(args.channel,args.year)
+              filename = '{}/wjets_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
               pickle.dump(wjets_reweighter, open(filename, 'wb'))
       print "Best Score"
       print best_score
 
-      dfs_mc = SetUpDataframeDict(wjets_df_concat,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-      norm = GetNormalisation(dfs_mc,wjets_reweighter)
-      gb_weights_test = norm*wjets_reweighter.predict_weights(dfs_mc["original_test"],dfs_mc["original_weights_test"],merge_weights=False)
-      print "Normalisation: ",norm
+      norm_dict[args.channel][args.year]['wjets'] = GetNormalisation(dfs,wjets_reweighter)
+
   
     # get ttbar fake factors
     if args.do_ttbar or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
@@ -198,11 +213,13 @@ if not args.batch:
               best_score['learning_rate'] = lr
               best_score['n_estimators'] = n_est
               # save model
-              filename = 'ttbar_reweighted_ff_{}_{}.sav'.format(args.channel,args.year)
+              filename = '{}/ttbar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
               pickle.dump(ttbar_reweighter, open(filename, 'wb'))
   
       print "Best Score"
       print best_score
+
+      norm_dict[args.channel][args.year]['ttbar'] = GetNormalisation(dfs,ttbar_reweighter)
   
     # get wjets mc fake factors
     if (args.do_W_mc) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
@@ -237,26 +254,14 @@ if not args.batch:
               best_score['learning_rate'] = lr
               best_score['n_estimators'] = n_est
               # save model
-              filename = 'wjets_mc_reweighted_ff_{}_{}.sav'.format(args.channel,args.year)
+              filename = '{}/wjets_mc_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
               pickle.dump(wjets_mc_reweighter, open(filename, 'wb'))
   
       print "Best Score"
       print best_score
-      dfs_mc = SetUpDataframeDict(wjets_df_concat,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-      norm = GetNormalisation(dfs_mc,wjets_mc_reweighter)
-      gb_weights_test = norm*wjets_mc_reweighter.predict_weights(dfs_mc["original_test"],dfs_mc["original_weights_test"],merge_weights=False)
-      print "Normalisation: ",norm
-      print gb_weights_test[:100]
-      print gb_weights_test.mean()
 
-      wjets_mc_reweighter = pickle.load(open("wjets_mc_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      print dfs_mc["original_test"]
-      gb_weights_test = norm*wjets_mc_reweighter.predict_weights(dfs_mc["original_test"],dfs_mc["original_weights_test"],merge_weights=False)
-      print "Normalisation: ",norm
-      print gb_weights_test[:100]
-      print gb_weights_test.mean()
+      norm_dict[args.channel][args.year]['wjets_mc'] = GetNormalisation(dfs,wjets_mc_reweighter)
 
-  
   # get QCD fake factors
   if args.do_QCD or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
     print ">> Combining and selecting events for QCD fake factor determination"
@@ -295,10 +300,12 @@ if not args.batch:
               best_score['learning_rate'] = lr
               best_score['n_estimators'] = n_est
               # save model
-              filename = 'qcd_reweighted_ff_{}_{}.sav'.format(args.channel,args.year)
+              filename = '{}/qcd_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
               pickle.dump(qcd_reweighter, open(filename, 'wb'))
       print "Best Score"
       print best_score
+
+      norm_dict[args.channel][args.year]['qcd'] = GetNormalisation(dfs,qcd_reweighter)
   
     elif args.channel == "tt":
   
@@ -311,9 +318,13 @@ if not args.batch:
       qcd_data_lead = qcd_data[qcd_data.loc[:,y_var.replace("X","2")] == 1]
   
       best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      for md in [4,5,6]:
-        for lr in [0.1,0.11,0.12]:
-          for n_est in [30,40,50]:
+      #for md in [4,5,6]:
+      #  for lr in [0.1,0.11,0.12]:
+      #    for n_est in [30,40,50]:
+      for md in [6]:
+        for lr in [0.11]:
+          for n_est in [50]:
+
             print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
   
             # split dataframe up into target and original, train and test, training var, weights and other vars
@@ -333,18 +344,22 @@ if not args.batch:
               best_score['learning_rate'] = lr
               best_score['n_estimators'] = n_est
               # save model
-              filename = 'qcd_lead_reweighted_ff_{}_{}.sav'.format(args.channel,args.year)
+              filename = '{}/qcd_lead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
               pickle.dump(qcd_lead_reweighter, open(filename, 'wb'))
       print "Best Score"
       print best_score
   
-  
+      norm_dict[args.channel][args.year]['lead'] = GetNormalisation(dfs,qcd_lead_reweighter)  
+
       # getting subleading tau fake factors
       qcd_data_sublead = qcd_data[qcd_data.loc[:,y_var.replace("X","1")] == 1]
       best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      for md in [4,5,6]:
-        for lr in [0.1,0.11,0.12]:
-          for n_est in [30,40,50]:
+      for md in [6]:
+        for lr in [0.11]:
+          for n_est in [50]:
+      #for md in [4,5,6]:
+      #  for lr in [0.1,0.11,0.12]:
+      #    for n_est in [30,40,50]:
             print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
   
             # split dataframe up into target and original, train and test, training var, weights and other vars
@@ -364,10 +379,12 @@ if not args.batch:
               best_score['learning_rate'] = lr
               best_score['n_estimators'] = n_est
               # save model
-              filename = 'qcd_sublead_reweighted_ff_{}_{}.sav'.format(args.channel,args.year)
+              filename = '{}/qcd_sublead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
               pickle.dump(qcd_sublead_reweighter, open(filename, 'wb'))
       print "Best Score"
       print best_score
+
+      norm_dict[args.channel][args.year]['sublead'] = GetNormalisation(dfs,qcd_sublead_reweighter)
 else:
   cmssw_base = os.getcwd().replace('src/UserCode/ICHiggsTauTau/Analysis/HiggsTauTauRun2','')
   cmd = "python scripts/ff_reweight_ml.py --channel={} --year={}".format(args.channel,args.year)
@@ -380,7 +397,10 @@ else:
   SubmitBatchJob(name,time=180,memory=24,cores=1)
   
 
-
+if not args.batch:
+  # Write json
+  with open(json_name, 'w') as outfile:
+    json.dump(norm_dict, outfile)
 
 
 
