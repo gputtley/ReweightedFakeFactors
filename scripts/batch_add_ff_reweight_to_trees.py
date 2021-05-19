@@ -3,6 +3,8 @@ import os
 from UserCode.ReweightedFakeFactors.ff_ml_tools import CreateBatchJob,SubmitBatchJob
 import argparse
 
+#python scripts/batch_add_ff_reweight_to_trees.py --input_location=/vols/cms/gu18/Offline/output/MSSM/mssm_2017_v10 --output_location=/vols/cms/gu18/Offline/output/MSSM/mssm_2017_v10_new
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_location',help= 'Name of input location (not including file name)', default='/vols/cms/gu18/Offline/output/MSSM/mssm_2017_v10')
 parser.add_argument('--output_location',help= 'Name of output location (not including file name)', default='/vols/cms/gu18/Offline/output/MSSM/reweight_ff_2017')
