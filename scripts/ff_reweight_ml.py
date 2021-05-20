@@ -139,7 +139,7 @@ if not args.batch:
       print ">> Combining and selecting events for W + jets fake factor determination"
   
       # Add selected data and subtracted other backgrounds with negative weights
-      wjets_data = CutAndScale(data_df_concat,"(mt_1>70 && os==1)",1)
+      wjets_data = CutAndScale(data_df_concat,"(mt_1>70 && os==1 && n_deepbjets==0)",1)
       #wjets_sub_mc = CutAndScale([ttbar_df_concat,other_df_concat],"(mt_1>70 && os==1)",-1)
       #wjets_sub_qcd_data = CutAndScale(data_df_concat,"(mt_1>70 && os==0)",-1.1)
       #wjets_sub_qcd_sub_mc = CutAndScale([wjets_df_concat,ttbar_df_concat,other_df_concat],"(mt_1>70 && os==0)",1.1)

@@ -495,7 +495,7 @@ def ScoreModel(dfs,model,X_vars,scoring_vars,other_vars,silent=False):
 def CreateBatchJob(name,cmssw_base,cmd_list):
   if os.path.exists(name): os.system('rm %(name)s' % vars())
   os.system('echo "#!/bin/bash" >> %(name)s' % vars())
-  os.system('echo "cd %(cmssw_base)s/src/UserCode/ICHiggsTauTau/ReweightedFakeFactors" >> %(name)s' % vars())
+  os.system('echo "cd %(cmssw_base)s/src/UserCode/ReweightedFakeFactors" >> %(name)s' % vars())
   os.system('echo "source /vols/grid/cms/setup.sh" >> %(name)s' % vars())
   os.system('echo "export SCRAM_ARCH=slc6_amd64_gcc481" >> %(name)s' % vars())
   os.system('echo "eval \'scramv1 runtime -sh\'" >> %(name)s' % vars())

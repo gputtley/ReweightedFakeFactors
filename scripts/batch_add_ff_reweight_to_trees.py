@@ -19,7 +19,7 @@ splitting = 100000
 cmssw_base = os.getcwd().replace('src/UserCode/ReweightedFakeFactors','')
 
 for file_name in os.listdir(loc):
-  if ".root" in file_name:
+  if ".root" in file_name and "SUSY" not in file_name:
     if "_et_" in file_name:
       channel = "et"
     elif "_mt_" in file_name:
@@ -46,9 +46,9 @@ for file_name in os.listdir(loc):
         CreateBatchJob('jobs/'+file_name.replace('.root','_'+str(i)+'.sh'),cmssw_base,[cmd])
         SubmitBatchJob('jobs/'+file_name.replace('.root','_'+str(i)+'.sh'),time=180,memory=24,cores=1)
 
-     else:
-       os.system("hadd -f {}/{} {}/{}".format(newloc,filename,newloc,filename.replace(".root","_*")))
-       os.system("rm {}/{}".format(newloc,filename.replace(".root","_*")))
+    else:
+      os.system("hadd -f {}/{} {}/{}".format(newloc,file_name,newloc,file_name.replace(".root","_*")))
+      os.system("rm {}/{}".format(newloc,file_name.replace(".root","_*")))
 
 
      

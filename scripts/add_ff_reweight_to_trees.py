@@ -19,8 +19,8 @@ parser.add_argument('--offset',help= 'Offset of job', default='0')
 args = parser.parse_args()
 
 columns = {"et":["pt_1","pt_2","jet_pt_2","jet_pt_2/pt_2","n_jets","n_deepbjets","tau_decay_mode_2","trg_etaucross","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"],
-           "mt":["pt_1","pt_2","jet_pt_2","jet_pt_2/pt_2","n_jets","n_deepbjets","tau_decay_mode_2","trg_etaucross","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"],
-           "tt":[]}
+           "mt":["pt_1","pt_2","jet_pt_2","jet_pt_2/pt_2","n_jets","n_deepbjets","tau_decay_mode_2","trg_mutaucross","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"],
+           "tt":["pt_1","pt_2","jet_pt_1/pt_1","jet_pt_2/pt_2","jet_pt_1","jet_pt_2","n_jets","n_deepbjets","tau_decay_mode_1","tau_decay_mode_2","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"]}
 
 weights = ["wt","wt_tau_trg_mssm","wt_tau_id_mssm"]
 
@@ -37,7 +37,6 @@ for small_tree in tree.iterate(entrysteps=int(args.splitting)):
   if k == int(args.offset):
     print k
     df = pandas.DataFrame.from_dict(small_tree)
-    
     for i in weights:
       if i == weights[0]:
         total_weights = df.loc[:,i]
@@ -48,34 +47,34 @@ for small_tree in tree.iterate(entrysteps=int(args.splitting)):
 
     if args.channel in ["mt","et"]:
 
-      wjets_reweighter = pickle.load(open("BDTs/wjets_mc_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      wjets_out = wjets_reweighter.predict_weights(new_df,total_weights)
-      df.loc[:,"wt_ff_reweight_wjets_mc_1"] = wjets_out*norm_dict[args.channel][args.year]["wjets_mc"]
+      wjets_mc_reweighter = pickle.load(open("BDTs/wjets_mc_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
+      wjets_mc_out = wjets_mc_reweighter.predict_weights(new_df,total_weights)
+      df.loc[:,"wt_ff_reweight_wjets_mc_1"] = wjets_mc_out*norm_dict[args.channel][args.year]["wjets_mc"]
   
-      #wjets_reweighter = pickle.load(open("BDTs/wjets_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      #wjets_out = wjets_reweighter.predict_weights(new_df,total_weights)
-      #df.loc[:,"wt_ff_reweight_wjets_1"] = wjets_out*norm_dict[args.channel][args.year]["wjets"]
+      wjets_reweighter = pickle.load(open("BDTs/wjets_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
+      wjets_out = wjets_reweighter.predict_weights(new_df,total_weights)
+      df.loc[:,"wt_ff_reweight_wjets_1"] = wjets_out*norm_dict[args.channel][args.year]["wjets"]
       
-      #qcd_reweighter = pickle.load(open("BDTs/qcd_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      #qcd_out = qcd_reweighter.predict_weights(new_df,weights)
-      #df.loc[:,"wt_ff_reweight_qcd_1"] = qcd_out*norm_dict[args.channel][args.year]["qcd"]
+      qcd_reweighter = pickle.load(open("BDTs/qcd_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
+      qcd_out = qcd_reweighter.predict_weights(new_df,total_weights)
+      df.loc[:,"wt_ff_reweight_qcd_1"] = qcd_out*norm_dict[args.channel][args.year]["qcd"]
       
-      #ttbar_reweighter = pickle.load(open("BDTs/ttbar_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      #ttbar_out = ttbar_reweighter.predict_weights(new_df,weights)
-      #df.loc[:,"wt_ff_reweight_ttbar_1"] = ttbar_out*norm_dict[args.channel][args.year]["qcd"]
+      ttbar_reweighter = pickle.load(open("BDTs/ttbar_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
+      ttbar_out = ttbar_reweighter.predict_weights(new_df,total_weights)
+      df.loc[:,"wt_ff_reweight_ttbar_1"] = ttbar_out*norm_dict[args.channel][args.year]["qcd"]
     
-    #elif channel == "tt":
+    elif args.channel == "tt":
 
-      #qcd_sublead_reweighter = pickle.load(open("BDTs/qcd_sublead_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      #qcd_sublead_out = qcd_sublead_reweighter.predict_weights(new_df,weights)
-      #df.loc[:,"wt_ff_reweight_qcd_2"] = qcd_sublead_out*norm_dict[args.channel][args.year]["sublead"]
+      qcd_sublead_reweighter = pickle.load(open("BDTs/qcd_sublead_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
+      qcd_sublead_out = qcd_sublead_reweighter.predict_weights(new_df,total_weights)
+      df.loc[:,"wt_ff_reweight_qcd_2"] = qcd_sublead_out*norm_dict[args.channel][args.year]["sublead"]
 
-      #qcd_lead_reweighter = pickle.load(open("BDTs/qcd_lead_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
-      #qcd_lead_out = qcd_lead_reweighter.predict_weights(new_df,weights)
-      #df.loc[:,"wt_ff_reweight_qcd_1"] = qcd_lead_out*norm_dict[args.channel][args.year]["lead"]
+      qcd_lead_reweighter = pickle.load(open("BDTs/qcd_lead_reweighted_ff_{}_{}.sav".format(args.channel,args.year), 'rb'))
+      qcd_lead_out = qcd_lead_reweighter.predict_weights(new_df,total_weights)
+      df.loc[:,"wt_ff_reweight_qcd_1"] = qcd_lead_out*norm_dict[args.channel][args.year]["lead"]
     
     to_root(df, args.output_location+'/'+args.filename.replace(".root","_"+str(k)+".root"), key='ntuple')
     
-    del df, new_df, wjets_reweighter, total_weights, small_tree
+    del df, new_df, total_weights, small_tree
   k += 1
 print "Finished processing"
