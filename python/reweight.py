@@ -45,7 +45,8 @@ from scipy.ndimage import gaussian_filter
 import numpy
 
 from hep_ml.commonutils import check_sample_weight, weighted_quantile
-from hep_ml import gradientboosting as gb
+#from hep_ml import gradientboosting as gb
+from UserCode.ReweightedFakeFactors import gradientboosting as gb
 from hep_ml import losses
 
 __author__ = 'Alex Rogozhnikov, Tatiana Likhomanenko'
@@ -214,6 +215,7 @@ class GBReweighter(BaseEstimator, ReweighterMixin):
         :param target_weight: weights for samples of original distributions
         :return: self
         """
+        original_keys = original.keys()
         self.n_features_ = None
         if self.gb_args is None:
             self.gb_args = {}
@@ -233,6 +235,9 @@ class GBReweighter(BaseEstimator, ReweighterMixin):
         target = numpy.array([1] * len(original) + [0] * len(target))
         weights = numpy.hstack([original_weight, target_weight])
         self.gb.fit(data, target, sample_weight=weights)
+        feature_importances = self.gb.feature_importances_
+        for i in range(0,len(original_keys)):
+          print(original_keys[i],feature_importances[i])
         return self
 
     def predict_weights(self, original, original_weight=None, merge_weights=False):
