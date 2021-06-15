@@ -8,6 +8,8 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_location',help= 'Name of input location (not including file name)', default='/vols/cms/gu18/Offline/output/MSSM/mssm_2017_v10')
 parser.add_argument('--output_location',help= 'Name of output location (not including file name)', default='/vols/cms/gu18/Offline/output/MSSM/reweight_ff_2017')
+parser.add_argument('--file',help= 'Specify to run for a specific file', default='all')
+parser.add_argument('--channel',help= 'Limit to single channel. If not set will do all', default=None)
 parser.add_argument("--hadd", action='store_true',help="Hadd files after adding weights")
 args = parser.parse_args()
 
@@ -18,8 +20,10 @@ splitting = 100000
 
 cmssw_base = os.getcwd().replace('src/UserCode/ReweightedFakeFactors','')
 
+if not args.hadd and args.file=="all": os.system("rm jobs/*")
+
 for file_name in os.listdir(loc):
-  if ".root" in file_name and "SUSY" not in file_name:
+  if ".root" in file_name and "SUSY" not in file_name and (args.file=="all" or args.file==file_name):
     if "_et_" in file_name:
       channel = "et"
     elif "_mt_" in file_name:
@@ -35,7 +39,7 @@ for file_name in os.listdir(loc):
       year = "2018"
 
 
-    if not args.hadd:
+    if not args.hadd and (args.channel == None or args.channel == channel):
       f = ROOT.TFile(loc+'/'+file_name,"READ")
       t = f.Get("ntuple")
       ent = t.GetEntries()
@@ -47,8 +51,12 @@ for file_name in os.listdir(loc):
         SubmitBatchJob('jobs/'+file_name.replace('.root','_'+str(i)+'.sh'),time=180,memory=24,cores=1)
 
     else:
-      os.system("hadd -f {}/{} {}/{}".format(newloc,file_name,newloc,file_name.replace(".root","_*")))
-      os.system("rm {}/{}".format(newloc,file_name.replace(".root","_*")))
+      if (args.channel == None or args.channel == channel):
+        cmd1 = "hadd -f {}/{} {}/{}".format(newloc,file_name,newloc,file_name.replace(".root","_*"))
+        cmd2 = "rm {}/{}".format(newloc,file_name.replace(".root","_*"))
+        cmd3 = "echo 'Finished processing'"
+        CreateBatchJob('jobs/hadd_'+file_name.replace('.root','.sh'),cmssw_base,[cmd1,cmd2,cmd3])
+        SubmitBatchJob('jobs/hadd_'+file_name.replace('.root','.sh'),time=180,memory=24,cores=1)
 
 
      

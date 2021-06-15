@@ -19,8 +19,8 @@ parser.add_argument('--output',help= 'Write outputs tp here', default='BDTs')
 parser.add_argument("--do_W", action='store_true',help="Get W + jets fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
 parser.add_argument("--do_QCD", action='store_true',help="Get qcd fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
 parser.add_argument("--do_ttbar", action='store_true',help="Get ttbar fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
-parser.add_argument("--do_W_mc", action='store_true',help="Get ttbar fake factors. If no do_{W,QCD,ttbar,W_mc} not set will do all.")
 parser.add_argument("--batch", action='store_true',help="Batch run fake factors")
+parser.add_argument("--no_save", action='store_true',help="Do not save models or overwrite normalisation json")
 args = parser.parse_args()
 
 
@@ -72,320 +72,230 @@ if not args.batch:
   elif args.year == "2017": m_lowpt,e_lowpt,t_highpt,t_lowpt_mt,t_lowpt_et = 25,28,180,32,35
   elif args.year == "2018": m_lowpt,e_lowpt,t_highpt,t_lowpt_mt,t_lowpt_et = 25,33,180,32,35
   if args.channel == "mt":
-    baseline = '(iso_1<0.15 && deepTauVsJets_vvvloose_2>0.5 && deepTauVsEle_vvloose_2>0.5 && deepTauVsMu_tight_2>0.5 && leptonveto==0 && pt_2>30 && ((trg_mutaucross==1&&pt_2>%(t_lowpt_mt)s&&pt_2<%(t_highpt)s&&fabs(eta_2)<2.1&&pt_1<%(m_lowpt)s)||(trg_singlemuon==1&&pt_1>=%(m_lowpt)s)||(trg_singletau_2==1&&pt_2>=%(t_highpt)s&&fabs(eta_2)<2.1)))' % vars()
+    baseline = '(deepTauVsJets_vvvloose_2>0.5 && deepTauVsEle_vvloose_2>0.5 && deepTauVsMu_tight_2>0.5 && leptonveto==0 && pt_2>30 && ((trg_mutaucross==1&&pt_2>%(t_lowpt_mt)s&&pt_2<%(t_highpt)s&&fabs(eta_2)<2.1&&pt_1<%(m_lowpt)s)||(trg_singlemuon==1&&pt_1>=%(m_lowpt)s)||(trg_singletau_2==1&&pt_2>=%(t_highpt)s&&fabs(eta_2)<2.1)))' % vars()
   elif args.channel == "et":
-    baseline = '(iso_1<0.15 && deepTauVsJets_vvvloose_2>0.5 && deepTauVsEle_tight_2>0.5 && deepTauVsMu_vloose_2>0.5 && pt_2>30 && ((trg_etaucross==1&&pt_2>%(t_lowpt_et)s&&pt_2<%(t_highpt)s&&fabs(eta_2)<2.1&&pt_1<%(e_lowpt)s)||(trg_singleelectron==1&&pt_1>=%(e_lowpt)s)||(trg_singletau_2==1&&pt_2>=%(t_highpt)s&&fabs(eta_2)<2.1)))' % vars()
+    baseline = '(deepTauVsJets_vvvloose_2>0.5 && deepTauVsEle_tight_2>0.5 && deepTauVsMu_vloose_2>0.5 && pt_2>30 && ((trg_etaucross==1&&pt_2>%(t_lowpt_et)s&&pt_2<%(t_highpt)s&&fabs(eta_2)<2.1&&pt_1<%(e_lowpt)s)||(trg_singleelectron==1&&pt_1>=%(e_lowpt)s)||(trg_singletau_2==1&&pt_2>=%(t_highpt)s&&fabs(eta_2)<2.1)))' % vars()
   elif args.channel == "tt":
     baseline = '(deepTauVsJets_vvvloose_1>0.5 && deepTauVsJets_vvvloose_2>0.5 && leptonveto==0 && (trg_doubletau==1 || (pt_1>%(t_highpt)s && trg_singletau_1==1) || (pt_2>%(t_highpt)s && trg_singletau_2==1)) && deepTauVsEle_vvloose_1==1 && deepTauVsEle_vvloose_2==1 && deepTauVsMu_vloose_1==1 && deepTauVsMu_vloose_2==1)' % vars()
   
   # variables and weights needed for training
   if args.channel == "mt":
-    X_vars = ["pt_1","pt_2","jet_pt_2","jet_pt_2/pt_2","n_jets","n_deepbjets","mva_dm_2","trg_mutaucross","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"]
+    X_vars = ["pt_1","pt_2","jet_pt_2","jet_pt_2/pt_2","n_jets","n_deepbjets","tau_decay_mode_2","trg_mutaucross","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"]
     scoring_vars = ['mt_tot','pt_1','pt_2','m_vis','met','eta_2','n_jets','n_deepbjets']
+    selection_vars = ["os","mt_1","gen_match_2","deepTauVsJets_medium_2","iso_1"]
   elif args.channel == "et":
     X_vars = ["pt_1","pt_2","jet_pt_2","jet_pt_2/pt_2","n_jets","n_deepbjets","tau_decay_mode_2","trg_etaucross","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"]
     scoring_vars = ['mt_tot','pt_1','pt_2','m_vis','met','eta_2','n_jets','n_deepbjets']
+    selection_vars = ["os","mt_1","gen_match_2","deepTauVsJets_medium_2","iso_1"]
   elif args.channel == "tt":
     X_vars = ["pt_1","pt_2","jet_pt_1/pt_1","jet_pt_2/pt_2","jet_pt_1","jet_pt_2","n_jets","n_deepbjets","tau_decay_mode_1","tau_decay_mode_2","dR","dphi","pt_1*cosh(eta_1)","pt_2*cosh(eta_2)","met","rho"]
     scoring_vars = ['mt_tot','pt_1','pt_2','m_vis','met','eta_1','eta_2','n_jets','n_deepbjets']
+    selection_vars = ["os","deepTauVsJets_vvloose_1","deepTauVsJets_vvloose_2","deepTauVsJets_medium_1","deepTauVsJets_medium_2"]
   
   weights = ["wt","wt_tau_trg_mssm","wt_tau_id_mssm"]
-  y_var = "deepTauVsJets_medium_X"
-  selection_vars = ["os","mt_1","gen_match_2"] # additional variables need for selection later
-  #other_vars = ["wt_ff_mssm_1","wt_ff_mssm_wjets_1","wt_ff_mssm_qcd_1","wt_ff_mssm_ttbar_1"]
   other_vars = []
   
   # read root files into dataframes, performing initial cuts
-  if (args.do_W or args.do_QCD) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
+  if (args.do_W or args.do_QCD) or not (args.do_ttbar or args.do_W or args.do_QCD):
     print ">> Converting root files into dataframes for data"
-    data_df_concat = GetDataframe(baseline,lumi,params,input_folder,data_files,args.channel,args.year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars,data=True)
+    data_df_concat = GetDataframe(baseline,lumi,params,input_folder,data_files,args.channel,args.year,X_vars,weights,selection_vars,scoring_vars,other_vars,data=True)
   
-  if (args.do_W_mc) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
+  if (args.do_W or not (args.do_ttbar or args.do_W or args.do_QCD)) and args.channel != "tt":
     print ">> Converting root files into dataframes for W + jets MC"
-    wjets_df_concat = GetDataframe(baseline,lumi,params,input_folder,wjets_files,args.channel,args.year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars)
+    wjets_df_concat = GetDataframe(baseline,lumi,params,input_folder,wjets_files+other_files,args.channel,args.year,X_vars,weights,selection_vars,scoring_vars,other_vars)
   
-  if (args.do_ttbar) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
+  if (args.do_ttbar or not (args.do_ttbar or args.do_W or args.do_QCD)) and args.channel != "tt":
     print ">> Converting root files into dataframes for ttbar MC"
-    ttbar_df_concat = GetDataframe(baseline,lumi,params,input_folder,ttbar_files,args.channel,args.year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars)
-  
-  #if (args.do_W or args.do_QCD) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
-  #  print ">> Converting root files into dataframes for other MC"
-  #  other_df_concat = GetDataframe(baseline,lumi,params,input_folder,other_files,args.channel,args.year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars)
+    ttbar_df_concat = GetDataframe(baseline,lumi,params,input_folder,ttbar_files,args.channel,args.year,X_vars,weights,selection_vars,scoring_vars,other_vars)
   
   print ">> All root files converted to dataframes"
 
-  # check if normalisation json exists
   json_name = '{}/ff_reweight_normalisation.json'.format(args.output)
-  # Check to see if json exists
   if os.path.isfile(json_name):
     with open(json_name) as json_file:
       norm_dict = json.load(json_file)
   else:
-    norm_dict = {'et':{'2016':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
-                       '2017':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
-                       '2018':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0}},
-                 'mt':{'2016':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
-                       '2017':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0},
-                       '2018':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0}},
-                 'tt':{'2016':{'lead':0,'sublead':0},
-                       '2017':{'lead':0,'sublead':0},
-                       '2018':{'lead':0,'sublead':0}}}
+    norm_dict = {'et':{'2016':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0,'qcd_dr_to_ar':0,'wjets_dr_correction':0,'wjets_dr_to_ar':0,'ttbar_dr_to_ar':0},
+                       '2017':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0,'qcd_dr_to_ar':0,'wjets_dr_correction':0,'wjets_dr_to_ar':0,'ttbar_dr_to_ar':0},
+                       '2018':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0,'qcd_dr_to_ar':0,'wjets_dr_correction':0,'wjets_dr_to_ar':0,'ttbar_dr_to_ar':0}},
+                 'mt':{'2016':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0,'qcd_dr_to_ar':0,'wjets_dr_correction':0,'wjets_dr_to_ar':0,'ttbar_dr_to_ar':0},
+                       '2017':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0,'qcd_dr_to_ar':0,'wjets_dr_correction':0,'wjets_dr_to_ar':0,'ttbar_dr_to_ar':0},
+                       '2018':{'qcd':0,'qcd_aiso':0,'wjets':0,'wjets_mc':0,'ttbar':0,'qcd_dr_to_ar':0,'wjets_dr_correction':0,'wjets_dr_to_ar':0,'ttbar_dr_to_ar':0}},
+                 'tt':{'2016':{'qcd_lead':0,'qcd_sublead':0,'qcd_double':0,'qcd_aiso_lead':0,'qcd_aiso_sublead':0,'qcd_lead_dr_to_ar':0,'qcd_sublead_dr_to_ar':0},
+                       '2017':{'qcd_lead':0,'qcd_sublead':0,'qcd_double':0,'qcd_aiso_lead':0,'qcd_aiso_sublead':0,'qcd_lead_dr_to_ar':0,'qcd_sublead_dr_to_ar':0},
+                       '2018':{'qcd_lead':0,'qcd_sublead':0,'qcd_double':0,'qcd_aiso_lead':0,'qcd_aiso_sublead':0,'qcd_lead_dr_to_ar':0,'qcd_sublead_dr_to_ar':0}}}
 
 
   # perform training and test in each determination region
   if args.channel in ["mt","et"]:
     # get W + jets fake factors
-    if args.do_W or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
-      print ">> Combining and selecting events for W + jets fake factor determination"
+    if args.do_W or not (args.do_ttbar or args.do_W or args.do_QCD):
   
-      # Add selected data and subtracted other backgrounds with negative weights
-      wjets_data = CutAndScale(data_df_concat,"(mt_1>70 && os==1 && n_deepbjets==0)",1)
-      #wjets_sub_mc = CutAndScale([ttbar_df_concat,other_df_concat],"(mt_1>70 && os==1)",-1)
-      #wjets_sub_qcd_data = CutAndScale(data_df_concat,"(mt_1>70 && os==0)",-1.1)
-      #wjets_sub_qcd_sub_mc = CutAndScale([wjets_df_concat,ttbar_df_concat,other_df_concat],"(mt_1>70 && os==0)",1.1)
-      #wjets_data = pd.concat([wjets_data,wjets_sub_mc,wjets_sub_qcd_data,wjets_sub_qcd_sub_mc],ignore_index=True, sort=False)
-  
-      best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      #for md in [4,5,6]:
-      #  for lr in [0.1,0.11,0.12]:
-      #    for n_est in [30,40,50]:
-      for md in [6]:
-        for lr in [0.12]:
-          for n_est in [50]:
+      print ">> Fitting the W + jets weight"
+      original = CutAndScale(data_df_concat,"(iso_1<0.15 && mt_1>70 && os==1 && n_deepbjets==0 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(data_df_concat,"(iso_1<0.15 && mt_1>70 && os==1 && n_deepbjets==0 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/wjets_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      wjets_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['wjets'] = normalisation
+      PrintMinMeanMax(original,wjets_reweighter,X_vars,normalisation)
+      print ""
 
-            print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
-  
-            # split dataframe up into target and original, train and test, training var, weights and other vars
-            dfs = SetUpDataframeDict(wjets_data,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-  
-            # fit model
-            wjets_reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
-            wjets_reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
-  
-            # test model
-            score = ScoreModel(dfs,wjets_reweighter,X_vars,scoring_vars,other_vars,silent=True)
-            if score[0] < best_score['combined']:
-              print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
-              best_score['combined'] = score[0]
-              best_score['KS'] = score[1]
-              best_score['max_depth'] = md
-              best_score['learning_rate'] = lr
-              best_score['n_estimators'] = n_est
-              # save model
-              filename = '{}/wjets_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
-              pickle.dump(wjets_reweighter, open(filename, 'wb'))
-      print "Best Score"
-      print best_score
+      print ">> Fitting the W + jets MC weight"
+      original = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1>70 && os==1 && n_deepbjets==0 && (gen_match_2==5 || gen_match_2==6) && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1>70 && os==1 && n_deepbjets==0 && (gen_match_2==5 || gen_match_2==6) && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/wjets_mc_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      wjets_mc_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['wjets_mc'] = normalisation
+      PrintMinMeanMax(original,wjets_mc_reweighter,X_vars,normalisation)
+      print ""
 
-      norm_dict[args.channel][args.year]['wjets'] = GetNormalisation(dfs,wjets_reweighter)
+      print ">> Fitting the DR correction for W + jets using MC"
+      original = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1>70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==0)",norm_dict[args.channel][args.year]['wjets_mc'])
+      wjets_mc_ar_weights = wjets_mc_reweighter.predict_weights(original.loc[:,func_to_name(X_vars)],original.loc[:,"scale"],merge_weights=False)
+      original.loc[:,"scale"] = original.loc[:,"scale"].multiply(wjets_mc_ar_weights)
+      target = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1>70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/wjets_dr_correction_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      wjets_dr_correction_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[20],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['wjets_dr_correction'] = normalisation
+      PrintMinMeanMax(original,wjets_dr_correction_reweighter,X_vars,normalisation)
+      print ""
 
-  
+      print ">> Fitting the DR to AR correction for W + jets using MC"
+      original = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1<70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==0)",norm_dict[args.channel][args.year]['wjets_mc']*norm_dict[args.channel][args.year]['wjets_dr_correction'])
+      wjets_mc_ar_weights = wjets_mc_reweighter.predict_weights(original.loc[:,func_to_name(X_vars)],original.loc[:,"scale"],merge_weights=False)
+      wjets_mc_ar_correction_weights = wjets_dr_correction_reweighter.predict_weights(original.loc[:,func_to_name(X_vars)],original.loc[:,"scale"],merge_weights=False)
+      original.loc[:,"scale"] = original.loc[:,"scale"].multiply(wjets_mc_ar_weights).multiply(wjets_mc_ar_correction_weights)
+      target = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1<70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/wjets_dr_to_ar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      wjets_dr_to_ar_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[40],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['wjets_dr_to_ar'] = normalisation
+      PrintMinMeanMax(original,wjets_dr_to_ar_reweighter,X_vars,normalisation)
+      print ""
+
+      print ">> Fitting the W + jets MC weight to compare to ttbar"
+      original = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1<70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(wjets_df_concat,"(iso_1<0.15 && mt_1<70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/wjets_mc_comparison_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      wjets_mc_comparison_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['wjets_mc_comparison'] = normalisation
+      PrintMinMeanMax(original,wjets_mc_comparison_reweighter,X_vars,normalisation)
+ 
+ 
     # get ttbar fake factors
-    if args.do_ttbar or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
-      print ">> Combining and selecting events for ttbar fake factor determination"
-  
-      # Add selected data and subtracted other backgrounds with negative weights
-      ttbar_data = CutAndScale(ttbar_df_concat,"(mt_1<70 && os==1 && gen_match_2==6)",1)
-  
-      best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      #for md in [4,5,6]:
-      #  for lr in [0.1,0.11,0.12]:
-      #    for n_est in [30,40,50]:
-      for md in [6]:
-        for lr in [0.12]:
-          for n_est in [50]:
-            print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
-  
-            # split dataframe up into target and original, train and test, training var, weights and other vars
-            dfs = SetUpDataframeDict(ttbar_data,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-  
-            # fit model
-            ttbar_reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
-            ttbar_reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
-  
-            # test model
-            score = ScoreModel(dfs,ttbar_reweighter,X_vars,scoring_vars,other_vars,silent=True)
-            if score[0] < best_score['combined']:
-              print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
-              best_score['combined'] = score[0]
-              best_score['KS'] = score[1]
-              best_score['max_depth'] = md
-              best_score['learning_rate'] = lr
-              best_score['n_estimators'] = n_est
-              # save model
-              filename = '{}/ttbar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
-              pickle.dump(ttbar_reweighter, open(filename, 'wb'))
-  
-      print "Best Score"
-      print best_score
-
-      norm_dict[args.channel][args.year]['ttbar'] = GetNormalisation(dfs,ttbar_reweighter)
-  
-    # get wjets mc fake factors
-    if (args.do_W_mc) or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
-      print ">> Combining and selecting events for W + jets MC fake factor determination"
-  
-      # Add selected data and subtracted other backgrounds with negative weights
-      wjets_mc_data = CutAndScale(wjets_df_concat,"(mt_1>70 && os==1 && gen_match_2==6)",1)
-  
-      best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      #for md in [4,5,6]:
-      #  for lr in [0.1,0.11,0.12]:
-      #    for n_est in [30,40,50]:
-      for md in [6]:
-        for lr in [0.12]:
-          for n_est in [50]:
-            print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
-  
-            # split dataframe up into target and original, train and test, training var, weights and other vars
-            dfs = SetUpDataframeDict(wjets_mc_data,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-       
-            # fit model
-            wjets_mc_reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
-            wjets_mc_reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
-     
-            # test model
-            score = ScoreModel(dfs,wjets_mc_reweighter,X_vars,scoring_vars,other_vars,silent=True)
-            if score[0] < best_score['combined']:
-              print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
-              best_score['combined'] = score[0]
-              best_score['KS'] = score[1]
-              best_score['max_depth'] = md
-              best_score['learning_rate'] = lr
-              best_score['n_estimators'] = n_est
-              # save model
-              filename = '{}/wjets_mc_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
-              pickle.dump(wjets_mc_reweighter, open(filename, 'wb'))
-  
-      print "Best Score"
-      print best_score
-
-      norm_dict[args.channel][args.year]['wjets_mc'] = GetNormalisation(dfs,wjets_mc_reweighter)
+    if args.do_ttbar or not (args.do_ttbar or args.do_W or args.do_QCD):
+      print ""
+      print ">> Fitting the ttbar weight"
+      original = CutAndScale(ttbar_df_concat,"(iso_1<0.15 && mt_1<70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(ttbar_df_concat,"(iso_1<0.15 && mt_1<70 && os==1 && gen_match_2==6 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/ttbar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      ttbar_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['ttbar'] = normalisation
+      PrintMinMeanMax(original,ttbar_reweighter,X_vars,normalisation)
 
   # get QCD fake factors
-  if args.do_QCD or not (args.do_ttbar or args.do_W_mc or args.do_W or args.do_QCD):
-    print ">> Combining and selecting events for QCD fake factor determination"
+  if args.do_QCD or not (args.do_ttbar or args.do_W or args.do_QCD):
   
     if args.channel in ["mt","et"]:
-  
-      # Add selected data and subtracted other backgrounds with negative weights
-      qcd_data = CutAndScale(data_df_concat,"(mt_1<50 && os==0)",1)
-      #qcd_sub_mc = CutAndScale([wjets_df_concat,ttbar_df_concat,other_df_concat],"(mt_1<50 && os==0)",-1)
-      #qcd_data = pd.concat([qcd_data,qcd_sub_mc],ignore_index=True, sort=False)
-  
-      best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      #for md in [4,5,6]:
-      #  for lr in [0.1,0.11,0.12]:
-      #    for n_est in [30,40,50]:
-      for md in [6]:
-        for lr in [0.12]:
-          for n_est in [50]:
+      # possibly add iso_1>0.05, unsure how to correct for the isolation shift
+      print ""
+      print ">> Fitting the QCD weight"
+      original = CutAndScale(data_df_concat,"(iso_1<0.15 && mt_1<50 && os==0 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(data_df_concat,"(iso_1<0.15 && mt_1<50 && os==0 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/qcd_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['qcd'] = normalisation
+      PrintMinMeanMax(original,qcd_reweighter,X_vars,normalisation)
+      print ""
 
-            print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
-  
-            # split dataframe up into target and original, train and test, training var, weights and other vars
-            dfs = SetUpDataframeDict(qcd_data,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-  
-            # fit model
-            qcd_reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
-            qcd_reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
-  
-            # test model
-            score = ScoreModel(dfs,qcd_reweighter,X_vars,scoring_vars,other_vars,silent=True)
-            if score[0] < best_score['combined']:
-              print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
-              best_score['combined'] = score[0]
-              best_score['KS'] = score[1]
-              best_score['max_depth'] = md
-              best_score['learning_rate'] = lr
-              best_score['n_estimators'] = n_est
-              # save model
-              filename = '{}/qcd_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
-              pickle.dump(qcd_reweighter, open(filename, 'wb'))
-      print "Best Score"
-      print best_score
+      # Problem here, seems to be too low stat for et for algorithm to work for anti-isolated data
+      # check why this is the case
+      # possibly lower iso_1 bottom cut
+      print ">> Fitting the QCD anti-isolated weight"
+      original = CutAndScale(data_df_concat,"(iso_1<0.5 && iso_1>0.25 && mt_1<50 && os==0 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(data_df_concat,"(iso_1<0.5 && iso_1>0.25 && mt_1<50 && os==0 && deepTauVsJets_medium_2==1)",1)
+      print original
+      print target
+      filename = '{}/qcd_aiso_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_aiso_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['qcd_aiso'] = normalisation
+      PrintMinMeanMax(original,qcd_aiso_reweighter,X_vars,normalisation)
+      print ""
 
-      norm_dict[args.channel][args.year]['qcd'] = GetNormalisation(dfs,qcd_reweighter)
-  
+      print ">> Fitting the DR to AR correction for QCD using anti-isolated data"
+      original = CutAndScale(data_df_concat,"(iso_1<0.5 && iso_1>0.25 && mt_1<70 && os==1 && deepTauVsJets_medium_2==0)",norm_dict[args.channel][args.year]['qcd_aiso'])
+      qcd_aiso_ar_weights = qcd_aiso_reweighter.predict_weights(original.loc[:,func_to_name(X_vars)],original.loc[:,"scale"],merge_weights=False)
+      original.loc[:,"scale"] = original.loc[:,"scale"].multiply(qcd_aiso_ar_weights)
+      target = CutAndScale(data_df_concat,"(iso_1<0.5 && iso_1>0.25 && mt_1<70 && os==1 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/qcd_dr_to_ar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_dr_to_ar_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[40],no_save=args.no_save)
+      if not args.no_save: norm_dict[args.channel][args.year]['qcd_dr_to_ar'] = normalisation
+      PrintMinMeanMax(original,qcd_dr_to_ar_reweighter,X_vars,normalisation)
+
     elif args.channel == "tt":
-  
-      # Add selected data and subtracted other backgrounds with negative weights
-      qcd_data = CutAndScale(data_df_concat,"(os==0)",1)
-      #qcd_sub_mc = CutAndScale([wjets_df_concat,ttbar_df_concat,other_df_concat],"(os==0)",-1)
-      #qcd_data = pd.concat([qcd_data,qcd_sub_mc],ignore_index=True, sort=False)
-  
-      # getting leading tau fake factors
-      qcd_data_lead = qcd_data[qcd_data.loc[:,y_var.replace("X","2")] == 1]
-  
-      best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      #for md in [4,5,6]:
-      #  for lr in [0.1,0.11,0.12]:
-      #    for n_est in [30,40,50]:
-      for md in [6]:
-        for lr in [0.11]:
-          for n_est in [50]:
+ 
+      print ">> Fitting the QCD leading tau weight"
+      original = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_medium_2==1 && deepTauVsJets_medium_1==0)",1)
+      target = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_medium_2==1 && deepTauVsJets_medium_1==1)",1)
+      filename = '{}/qcd_lead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_lead_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      norm_dict[args.channel][args.year]['qcd_lead'] = normalisation
+      PrintMinMeanMax(original,qcd_lead_reweighter,X_vars,normalisation)
+      print ""
+      print ">> Fitting the QCD subleading tau weight"
+      original = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_medium_1==1 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_medium_1==1 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/qcd_sublead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_sublead_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      norm_dict[args.channel][args.year]['qcd_sublead'] = normalisation
+      PrintMinMeanMax(original,qcd_sublead_reweighter,X_vars,normalisation)
+      # double tau weight currently not needed
+      #print ""
+      #print ">> Fitting the QCD double tau weight"
+      #original = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_medium_1==0 && deepTauVsJets_medium_2==0)",1)
+      #target = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_medium_1==1 && deepTauVsJets_medium_2==1)",1)
+      #filename = '{}/qcd_double_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      #qcd_double_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[7],[0.11],[60],no_save=args.no_save)
+      #norm_dict[args.channel][args.year]['qcd_double'] = normalisation
+      #PrintMinMeanMax(original,qcd_double_reweighter,X_vars,normalisation)
+      print ""
+      print ">> Fitting the QCD anti-isolated leading tau weight"
+      original = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_vvloose_2==0 && deepTauVsJets_medium_1==0)",1)
+      target = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_vvloose_2==0 && deepTauVsJets_medium_1==1)",1)
+      filename = '{}/qcd_aiso_lead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_aiso_lead_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      norm_dict[args.channel][args.year]['qcd_aiso_lead'] = normalisation
+      PrintMinMeanMax(original,qcd_aiso_lead_reweighter,X_vars,normalisation)
+      print ""
+      print ">> Fitting the QCD anti-isolated subleading tau weight"
+      original = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_vvloose_1==0 && deepTauVsJets_medium_2==0)",1)
+      target = CutAndScale(data_df_concat,"(os==0 && deepTauVsJets_vvloose_1==0 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/qcd_aiso_sublead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_aiso_sublead_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[80],no_save=args.no_save)
+      norm_dict[args.channel][args.year]['qcd_aiso_sublead'] = normalisation
+      PrintMinMeanMax(original,qcd_aiso_sublead_reweighter,X_vars,normalisation)
+      print ""
+      print ">> Fitting the DR to AR correction for QCD leading tau using anti-isolated data"
+      original = CutAndScale(data_df_concat,"(os==1 && deepTauVsJets_vvloose_2==0 && deepTauVsJets_medium_1==0)",norm_dict[args.channel][args.year]['qcd_aiso_lead'])
+      qcd_aiso_lead_ar_weights = qcd_aiso_lead_reweighter.predict_weights(original.loc[:,func_to_name(X_vars)],original.loc[:,"scale"],merge_weights=False)
+      original.loc[:,"scale"] = original.loc[:,"scale"].multiply(qcd_aiso_lead_ar_weights)
+      target = CutAndScale(data_df_concat,"(os==1 && deepTauVsJets_vvloose_2==0 && deepTauVsJets_medium_1==1)",1)
+      filename = '{}/qcd_lead_dr_to_ar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_lead_dr_to_ar_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[40],no_save=args.no_save)
+      norm_dict[args.channel][args.year]['qcd_lead_dr_to_ar'] = normalisation
+      PrintMinMeanMax(original,qcd_lead_dr_to_ar_reweighter,X_vars,normalisation)
+      print ""
+      print ">> Fitting the DR to AR correction for QCD subleading tau using anti-isolated data"
+      original = CutAndScale(data_df_concat,"(os==1 && deepTauVsJets_vvloose_1==0 && deepTauVsJets_medium_2==0)",norm_dict[args.channel][args.year]['qcd_aiso_sublead'])
+      qcd_aiso_sublead_ar_weights = qcd_aiso_sublead_reweighter.predict_weights(original.loc[:,func_to_name(X_vars)],original.loc[:,"scale"],merge_weights=False)
+      original.loc[:,"scale"] = original.loc[:,"scale"].multiply(qcd_aiso_sublead_ar_weights)
+      target = CutAndScale(data_df_concat,"(os==1 && deepTauVsJets_vvloose_1==0 && deepTauVsJets_medium_2==1)",1)
+      filename = '{}/qcd_sublead_dr_to_ar_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
+      qcd_sublead_dr_to_ar_reweighter, normalisation = FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,[6],[0.1],[40],no_save=args.no_save)
+      norm_dict[args.channel][args.year]['qcd_sublead_dr_to_ar'] = normalisation
+      PrintMinMeanMax(original,qcd_sublead_dr_to_ar_reweighter,X_vars,normalisation)
 
-            print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
-  
-            # split dataframe up into target and original, train and test, training var, weights and other vars
-            dfs = SetUpDataframeDict(qcd_data_lead,X_vars,y_var.replace("X","1"),selection_vars,scoring_vars,other_vars)
-  
-            # fit model
-            qcd_lead_reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
-            qcd_lead_reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
-  
-            # test model
-            score = ScoreModel(dfs,qcd_lead_reweighter,X_vars,scoring_vars,other_vars,silent=True)
-            if score[0] < best_score['combined']:
-              print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
-              best_score['combined'] = score[0]
-              best_score['KS'] = score[1]
-              best_score['max_depth'] = md
-              best_score['learning_rate'] = lr
-              best_score['n_estimators'] = n_est
-              # save model
-              filename = '{}/qcd_lead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
-              pickle.dump(qcd_lead_reweighter, open(filename, 'wb'))
-      print "Best Score"
-      print best_score
-  
-      norm_dict[args.channel][args.year]['lead'] = GetNormalisation(dfs,qcd_lead_reweighter)  
-
-      # getting subleading tau fake factors
-      qcd_data_sublead = qcd_data[qcd_data.loc[:,y_var.replace("X","1")] == 1]
-      best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
-      for md in [6]:
-        for lr in [0.11]:
-          for n_est in [50]:
-      #for md in [4,5,6]:
-      #  for lr in [0.1,0.11,0.12]:
-      #    for n_est in [30,40,50]:
-            print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
-  
-            # split dataframe up into target and original, train and test, training var, weights and other vars
-            dfs = SetUpDataframeDict(qcd_data_sublead,X_vars,y_var.replace("X","2"),selection_vars,scoring_vars,other_vars)
-  
-            # fit model
-            qcd_sublead_reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
-            qcd_sublead_reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
-  
-            # test model
-            score = ScoreModel(dfs,qcd_sublead_reweighter,X_vars,scoring_vars,other_vars,silent=True)
-            if score[0] < best_score['combined']:
-              print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
-              best_score['combined'] = score[0]
-              best_score['KS'] = score[1]
-              best_score['max_depth'] = md
-              best_score['learning_rate'] = lr
-              best_score['n_estimators'] = n_est
-              # save model
-              filename = '{}/qcd_sublead_reweighted_ff_{}_{}.sav'.format(args.output,args.channel,args.year)
-              pickle.dump(qcd_sublead_reweighter, open(filename, 'wb'))
-      print "Best Score"
-      print best_score
-
-      norm_dict[args.channel][args.year]['sublead'] = GetNormalisation(dfs,qcd_sublead_reweighter)
 else:
+  # batch running doesn't work, as requires too much memory
   cmssw_base = os.getcwd().replace('src/UserCode/ICHiggsTauTau/Analysis/HiggsTauTauRun2','')
   cmd = "python scripts/ff_reweight_ml.py --channel={} --year={}".format(args.channel,args.year)
   if args.do_W: cmd += ' --do_W'
@@ -397,8 +307,8 @@ else:
   SubmitBatchJob(name,time=180,memory=24,cores=1)
   
 
-if not args.batch:
-  # Write json
+# Write json
+if not args.no_save:
   with open(json_name, 'w') as outfile:
     json.dump(norm_dict, outfile)
 

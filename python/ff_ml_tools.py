@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import fnmatch
 import itertools
 import math
+import copy
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from collections import Counter
@@ -22,7 +23,22 @@ from root_numpy import list_branches
 from root_numpy.extern.six import string_types
 from math import ceil
 from hep_ml.metrics_utils import ks_2samp_weighted
+from UserCode.ReweightedFakeFactors import reweight
+from UserCode.ReweightedFakeFactors.reweight import GBReweighter
 
+def multiply_columns(df,list_vars): 
+  for col in list_vars:
+    if col == list_vars[0]:
+      ds = df.loc[:,col]
+    else:
+      ds = ds.multiply(df.loc[:,col])
+  return ds
+
+
+def func_to_name(list_vars):
+  for i in range(0,len(list_vars)):
+    list_vars[i] = list_vars[i].replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
+  return list_vars
 
 def setup_dataframe(loc,root_files,channel,year,vars,selection):
   # Additional functions to work with
@@ -30,7 +46,6 @@ def setup_dataframe(loc,root_files,channel,year,vars,selection):
 
   # Set up variables to get from root file trees
   get_variables = []
-
   # Get variables needed for training
   mod_vars = []
   delim=["*","/","(",")","==",">=","<",">","&&","||"]
@@ -48,92 +63,88 @@ def setup_dataframe(loc,root_files,channel,year,vars,selection):
   split_list = custom_split(selection.replace(" ",""),deliminators=delim)
   for j in split_list:
     if j not in get_variables and not j.replace(".","").isdigit() and not j in delim and not j in list(func_dict.keys()): get_variables.append(j)
-  #print ">> Getting variables from ROOT files: "
-  #print get_variables
 
   # Add all root file trees for variables determined above to dataframes
-  if str(type(i)) == "<type 'str'>": root_files = [root_files]
-  for i in root_files:
-    tree = uproot.open(loc+'/'+i+'_'+channel+'_'+year+'.root')["ntuple"]
-    if i == root_files[0]:
-      df = tree.pandas.df(get_variables)
-    else:
-      df = pd.concat([df,tree.pandas.df(get_variables)],ignore_index=True, sort=False)
-  # Cut dataframe with selection
-  #print ">> Selected events matching the condition: "
-  #print selection
+  if str(type(root_files)) == "<type 'str'>": root_files = [root_files]
+  for rf in root_files:
+    tree = uproot.open(loc+'/'+rf+'_'+channel+'_'+year+'.root')["ntuple"]
+    df = tree.pandas.df(get_variables)
 
-  # Rename variables and deliminators
-  split_list = custom_split(selection.replace(" ",""),deliminators=["*","/","(",")","==",">=","<",">","&&","||"])
-  for j in range(0,len(split_list)):
-    if not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()): 
-      split_list[j] = '(df["{}"]'.format(split_list[j])
-    elif split_list[j] == "&&":
-      split_list[j] = ")&"
-    elif split_list[j] == "||":
-      split_list[j] = ")|"
-  split_list.append(")")
+    # Rename variables and deliminators
+    split_list = custom_split(selection.replace(" ",""),deliminators=["*","/","(",")","==",">=","<",">","&&","||"])
+    for j in range(0,len(split_list)):
+      if not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()): 
+        split_list[j] = '(df.loc[:,"{}"]'.format(split_list[j])
+      elif split_list[j] == "&&":
+        split_list[j] = ")&"
+      elif split_list[j] == "||":
+        split_list[j] = ")|"
+    split_list.append(")")
 
-  # Rename functions
-  for func_name, func_def in func_dict.items():
-    for i in find_in_list(func_name,split_list):
-      split_list[find_closed_bracket(i+1,split_list)] = ".apply(lambda x: {})".format(func_def) + split_list[find_closed_bracket(i+1,split_list)]
-    for j in split_list:
-      if j == func_name: split_list.remove(j)
+    # Rename functions
+    for func_name, func_def in func_dict.items():
+      for i in find_in_list(func_name,split_list):
+        split_list[find_closed_bracket(i+1,split_list)] = ".apply(lambda x: {})".format(func_def) + split_list[find_closed_bracket(i+1,split_list)]
+      for j in split_list:
+        if j == func_name: split_list.remove(j)
 
-  # Combine command and cut dataframe
-  cmd = ""
-  for i in split_list: cmd += i
-  df = eval('df[{}]'.format(cmd))
-
-  # Calculate modified variables
-  #print ">> Calculating modified variables and adding them to the dataframe"
-  for i in mod_vars:
-    var_string = i.replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
-    split_list = custom_split(i.replace(" ",""),deliminators=delim)
-    for j in range(len(split_list)-1,-1,-1):
-      if "/" in split_list[j]:
-        split_list[j] = ".divide("
-        split_list[j+1] += ")"
-      elif "*" in split_list[j]:
-        split_list[j] = ".multiply("
-        split_list[j+1] += ")"
-      elif not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()) and not split_list[j]=="":
-        split_list[j] =  "df.loc[:,'{}']".format(split_list[j])
-      elif "==" in split_list[j]:
-        split_list[j] = ".apply(lambda x: 1 if x=={} else 0)".format(split_list[j+1])
-        split_list[j+1] = ""
-      elif ">=" in split_list[j]:
-        split_list[j] = ".apply(lambda x: 1 if x>={} else 0)".format(split_list[j+1])
-        split_list[j+1] = ""
-      elif "<=" in split_list[j]:
-        split_list[j] = ".apply(lambda x: 1 if x<={} else 0)".format(split_list[j+1])
-        split_list[j+1] = ""
-      elif ">" in split_list[j]:
-        split_list[j] = ".apply(lambda x: 1 if x>{} else 0)".format(split_list[j+1])
-        split_list[j+1] = ""
-      elif "<" in split_list[j]:
-        split_list[j] = ".apply(lambda x: 1 if x<{} else 0)".format(split_list[j+1])
-        split_list[j+1] = ""
-      else:
-        for func_name, func_def in func_dict.items():
-          if func_name in split_list[j]:
-            split_list[j] = "{}.apply(lambda x: {})".format(split_list[j+2],func_def)
-            split_list[j+1] = ""
-            split_list[j+2] = ""
-            split_list[j+3] = ""
+    # Combine command and cut dataframe
     cmd = ""
     for i in split_list: cmd += i
-    df.loc[:,var_string] = eval(cmd)
-       
-  # Removing variables not used in training
-  #print ">> Removing variables that are not needed"
-  for i in get_variables:
-    if i not in vars:
-      var_name  = i.replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
-      df = df.drop([var_name],axis=1)
+    df = eval('df.loc[{}]'.format(cmd))
 
-  return df
+    # Calculate modified variables
+    for i in mod_vars:
+      var_string = i.replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
+      split_list = custom_split(i.replace(" ",""),deliminators=delim)
+      for j in range(len(split_list)-1,-1,-1):
+        if "/" in split_list[j]:
+          split_list[j] = ".divide("
+          split_list[j+1] += ")"
+        elif "*" in split_list[j]:
+          split_list[j] = ".multiply("
+          split_list[j+1] += ")"
+        elif not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()) and not split_list[j]=="":
+          split_list[j] =  "df.loc[:,'{}']".format(split_list[j])
+        elif "==" in split_list[j]:
+          split_list[j] = ".apply(lambda x: 1 if x=={} else 0)".format(split_list[j+1])
+          split_list[j+1] = ""
+        elif ">=" in split_list[j]:
+          split_list[j] = ".apply(lambda x: 1 if x>={} else 0)".format(split_list[j+1])
+          split_list[j+1] = ""
+        elif "<=" in split_list[j]:
+          split_list[j] = ".apply(lambda x: 1 if x<={} else 0)".format(split_list[j+1])
+          split_list[j+1] = ""
+        elif ">" in split_list[j]:
+          split_list[j] = ".apply(lambda x: 1 if x>{} else 0)".format(split_list[j+1])
+          split_list[j+1] = ""
+        elif "<" in split_list[j]:
+          split_list[j] = ".apply(lambda x: 1 if x<{} else 0)".format(split_list[j+1])
+          split_list[j+1] = ""
+        else:
+          for func_name, func_def in func_dict.items():
+            if func_name in split_list[j]:
+              split_list[j] = "{}.apply(lambda x: {})".format(split_list[j+2],func_def)
+              split_list[j+1] = ""
+              split_list[j+2] = ""
+              split_list[j+3] = ""
+      cmd = ""
+      for i in split_list: cmd += i
+      df.loc[:,var_string] = eval(cmd)
+         
+    # Removing variables not used in training
+    for i in get_variables:
+      if i not in vars:
+        var_name  = i.replace("*","_times_").replace("/","_over_").replace("==","_").replace(">","_gt_").replace("<","_lt_").replace("(","_").replace(")","")
+        df = df.drop([var_name],axis=1)
+
+    # combine into total_df
+    if rf == root_files[0]:
+      total_df = df.copy(deep=True)
+    else:
+      total_df = pd.concat([total_df,df],ignore_index=True, sort=False)
+
+  return total_df
 
 def custom_split(string,deliminators=[","]):
   single_deliminators = []
@@ -356,12 +367,9 @@ def SelectColumns(df,columns):
   new_df = new_df.loc[:,columns_string]
   return new_df
 
-def GetDataframe(baseline,lumi,params,input_folder,files,channel,year,X_vars,weights,y_var,selection_vars,scoring_vars,other_vars,data=False):
+def GetDataframe(baseline,lumi,params,input_folder,files,channel,year,X_vars,weights,selection_vars,scoring_vars,other_vars,data=False):
   for i in files:
-    if channel in ["et","mt"]:
-      df =  setup_dataframe(input_folder,i,channel,year,list(dict.fromkeys(X_vars+weights+[y_var.replace("X","2")]+selection_vars+scoring_vars+other_vars)),baseline)
-    elif channel == "tt":
-      df =  setup_dataframe(input_folder,i,channel,year,list(dict.fromkeys(X_vars+weights+[y_var.replace("X","1"),y_var.replace("X","2")]+selection_vars+scoring_vars+other_vars)),baseline)
+    df =  setup_dataframe(input_folder,i,channel,year,list(dict.fromkeys(X_vars+weights+selection_vars+scoring_vars+other_vars)),baseline)
     if len(df>0): # needed if no events meet selection
       if not data:
         df.loc[:,"scale"] = lumi*params[i]['xs']/params[i]['evt']
@@ -377,7 +385,7 @@ def GetDataframe(baseline,lumi,params,input_folder,files,channel,year,X_vars,wei
     del df
   return df_total
 
-def CutAndScale(df,selection,scale):
+def CutAndScale(df,selection,scale,model_weights=None):
   if isinstance(df, list):
     df = pd.concat(df,ignore_index=True, sort=False)
   delim=["*","/","(",")","==",">=","<",">","&&","||"]
@@ -386,7 +394,7 @@ def CutAndScale(df,selection,scale):
   split_list = custom_split(selection.replace(" ",""),deliminators=delim)
   for j in range(0,len(split_list)):
     if not split_list[j].replace(".","").isdigit() and not split_list[j] in delim and not split_list[j] in list(func_dict.keys()):
-      split_list[j] = '(df["{}"]'.format(split_list[j])
+      split_list[j] = '(df.loc[:,"{}"]'.format(split_list[j])
     elif split_list[j] == "&&":
       split_list[j] = ")&"
     elif split_list[j] == "||":
@@ -403,26 +411,26 @@ def CutAndScale(df,selection,scale):
   # Combine command and cut dataframe
   cmd = ""
   for i in split_list: cmd += i
-  df = eval('df[{}]'.format(cmd))
-  df.loc[:,"scale"] = scale*df.loc[:,"scale"]
+  df = eval('df.loc[{}]'.format(cmd))
+  df.loc[:,"scale"] *= scale
   return df
   
-def SetUpDataframeDict(data,X_vars,y_var,selection_vars,scoring_vars,other_vars):
+
+def SetUpDataframeDict(original,target,X_vars,selection_vars,scoring_vars,other_vars):
   # drop selection variables
-  data = data.drop(selection_vars,axis=1)
+  original = original.drop(selection_vars,axis=1)
+  target = target.drop(selection_vars,axis=1)
 
   # set up train and test dataset
-  X, y = data.drop([y_var],axis=1),data.loc[:,y_var]
-  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=123)
-  train = pd.concat([X_train, y_train], axis=1)
-  test = pd.concat([X_test, y_test], axis=1)
+  original_train, original_test = train_test_split(original, test_size=0.5, random_state=123)
+  target_train, target_test = train_test_split(target, test_size=0.5, random_state=123)
+
+  del original
+  del target
 
   for i in scoring_vars:
     if i not in X_vars:
       other_vars.append(i)
-
-  original_train, target_train = train[(train[y_var]==0)], train[(train[y_var]==1)]
-  original_test, target_test = test[(test[y_var]==0)], test[(test[y_var]==1)]
 
   # rename X_vars
   for i in range(0,len(X_vars)):
@@ -432,15 +440,14 @@ def SetUpDataframeDict(data,X_vars,y_var,selection_vars,scoring_vars,other_vars)
 
   dfs["original_weights_train"], dfs["target_weights_train"] = original_train.loc[:,"scale"], target_train.loc[:,"scale"]
   dfs["original_other_train"], dfs["target_other_train"] = original_train.loc[:,other_vars], target_train.loc[:,other_vars]
-  #dfs["original_train"], dfs["target_train"] = original_train.drop([y_var,"scale"]+other_vars,axis=1), target_train.drop([y_var,"scale"]+other_vars,axis=1)
   dfs["original_train"], dfs["target_train"] = original_train.loc[:,X_vars], target_train.loc[:,X_vars]
 
   dfs["original_weights_test"], dfs["target_weights_test"] = original_test.loc[:,"scale"], target_test.loc[:,"scale"]
   dfs["original_other_test"], dfs["target_other_test"] = original_test.loc[:,other_vars], target_test.loc[:,other_vars]
-  #dfs["original_test"], dfs["target_test"] = original_test.drop([y_var,"scale"]+other_vars,axis=1), target_test.drop([y_var,"scale"]+other_vars,axis=1)
   dfs["original_test"], dfs["target_test"] = original_test.loc[:,X_vars], target_test.loc[:,X_vars]
 
   return dfs
+
 
 def GetNormalisation(dfs,model):
   gb_weights_train = model.predict_weights(dfs["original_train"],dfs["original_weights_train"],merge_weights=False)
@@ -491,6 +498,44 @@ def ScoreModel(dfs,model,X_vars,scoring_vars,other_vars,silent=False):
     print score
   return score
 
+def FitAndScore(filename,original,target,X_vars,selection_vars,scoring_vars,other_vars,max_depth,learning_rate,n_estimators,no_save=False):
+  best_score = {'combined':1,'KS':[],'max_depth':1,'learning_rate':1,'n_estimators':1}
+  for md in max_depth:
+    for lr in learning_rate:
+      for n_est in n_estimators:
+        #print "learning_rate={} max_depth={} n_estimators={}".format(lr,md,n_est)
+ 
+        # split dataframe up into target and original, train and test, training var, weights and other vars
+        dfs = SetUpDataframeDict(original,target,X_vars,selection_vars,scoring_vars,other_vars)
+ 
+        # fit model
+        reweighter = reweight.GBReweighter(n_estimators=n_est, learning_rate=lr, max_depth=md, min_samples_leaf=1000, gb_args={'subsample': 0.4})
+        reweighter.fit(dfs["original_train"], dfs["target_train"], original_weight=dfs["original_weights_train"] ,target_weight=dfs["target_weights_train"])
+
+ 
+        # test model
+        score = ScoreModel(dfs,reweighter,X_vars,scoring_vars,other_vars,silent=True)
+        if score[0] < best_score['combined']:
+          #print "learning_rate={} max_depth={} n_estimators={}: {}".format(lr,md,n_est,score)
+          best_score['combined'] = score[0]
+          best_score['KS'] = score[1]
+          best_score['max_depth'] = md
+          best_score['learning_rate'] = lr
+          best_score['n_estimators'] = n_est
+          # save model
+          if not no_save: pickle.dump(reweighter, open(filename, 'wb'))
+          # remember best model
+          best_model = copy.deepcopy(reweighter)
+          # get normalisation
+          normalisation = GetNormalisation(dfs,reweighter)
+ 
+  print "Best Score"
+  print best_score
+  return best_model, normalisation
+
+def PrintMinMeanMax(df,model,X_vars,normalisation):
+  weights = normalisation*model.predict_weights(df.loc[:,func_to_name(X_vars)],df.loc[:,"scale"],merge_weights=False)
+  print "(Min, Mean, Max) = ({}, {}, {})".format(weights.min(),weights.mean(),weights.max())
 
 def CreateBatchJob(name,cmssw_base,cmd_list):
   if os.path.exists(name): os.system('rm %(name)s' % vars())
